@@ -1,0 +1,10 @@
+[package]
+name = "gffplot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+bio = "2.0.3"
+clap = { version = "4.5.29", features = ["cargo"] }
+rand = "0.9.0"
