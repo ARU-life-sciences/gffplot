@@ -1,8 +1,9 @@
 use crate::parse::Row;
 use anyhow::Result;
 use bio::bio_types::strand::Strand;
+use calm_io::stdoutln;
 use rand::Rng;
-use std::{collections::BTreeMap, fs, io::Write, path::PathBuf};
+use std::collections::BTreeMap;
 
 /// Size of the margins in the plot.
 static MARGIN: usize = 35;
@@ -10,6 +11,9 @@ static MARGIN: usize = 35;
 static WIDTH: usize = 1200;
 /// The height of each subplot.
 static SUBPLOT_HEIGHT: usize = 200;
+/// Colours for the different types of features.
+//                           ORFs       cmscan     tRNA        rRNA
+static COLORS: &[&str] = &["#26547c", "#ef476f", "#ffd166", "#06d6a0"];
 /// Function to make the HTML string.
 fn make_html(svg: String) -> String {
     format!(
@@ -51,19 +55,6 @@ fn make_html(svg: String) -> String {
         var tooltip = document.getElementById('tooltip');
         tooltip.style.display = 'none';
     }}
-
-    function addTextOnClick(evt, text) {{
-        let svgNS = 'http://www.w3.org/2000/svg';
-        let newText = document.createElementNS(svgNS, 'text');
-        newText.setAttributeNS(null, 'x', evt.pageX - 18 + 'px');
-        newText.setAttributeNS(null, 'y', evt.pageY - 18 + 'px');
-        newText.setAttributeNS(null, 'font-size', '18');
-        newText.setAttributeNS(null, 'font-family', 'monospace');
-
-        let textNode = document.createTextNode(text);
-        newText.appendChild(textNode);
-        document.getElementById('textGroup').appendChild(newText);
-    }}
 </script>
 </html>
     ",
@@ -74,80 +65,15 @@ fn make_html(svg: String) -> String {
 /// `PlotData` database. Composed of a `BTreeMap`, where
 /// the keys are the contigs/fasta ID's and the values
 /// are a vector of `PlotDataRow`.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PlotData {
     pub data: BTreeMap<String, Vec<Row>>,
 }
 
 impl PlotData {
-    /// Create a new instance of `PlotData`.
-    pub fn new() -> Self {
-        Self {
-            data: BTreeMap::new(),
-        }
-    }
-    /// Statistics on the plot data. Understand quickly the completeness
-    /// of each contig. There are a few shortcomings of the approach, but it
-    /// is quick and dirty.
-    // pub fn completeness_angiosperms(&self) {
-    //     // two genes in our set which are missing in (most/all) angiosperms
-    //     let core_angiosperm_missing = 2;
-    //     // and tRNA missing from seed plants (which incl angiosperms)
-    //     // not sure how to filter this at the moment.
-    //     let trna_missing = 0;
-
-    //     // number of core genes
-    //     let mut core_genes = MitoGene::iterator()
-    //         .filter(|e| !e.to_string().contains("Trn"))
-    //         .collect::<Vec<_>>();
-
-    //     core_genes.sort();
-    //     core_genes.dedup();
-
-    //     let mut trna_genes = MitoGene::iterator()
-    //         .filter(|e| e.to_string().contains("Trn"))
-    //         .collect::<Vec<_>>();
-
-    //     trna_genes.sort();
-    //     trna_genes.dedup();
-
-    //     let number_core_genes = core_genes.len() - core_angiosperm_missing;
-    //     let number_trna_genes = trna_genes.len() - trna_missing;
-
-    //     for (contig, genes) in &self.data {
-    //         let mut number_core = genes
-    //             .iter()
-    //             .filter(|e| !e.query_name.to_string().contains("Trn"))
-    //             .map(|e| e.query_name)
-    //             .collect::<Vec<_>>();
-
-    //         number_core.sort();
-    //         number_core.dedup();
-
-    //         let mut number_trna = genes
-    //             .iter()
-    //             .filter(|e| e.query_name.to_string().contains("Trn"))
-    //             .map(|e| e.query_name)
-    //             .collect::<Vec<_>>();
-
-    //         number_trna.sort();
-    //         number_trna.dedup();
-
-    //         // print the stats
-    //         println!(
-    //             "# contig: {}\n# % core genes present: {:.2}\n# % tRNA genes present: {:.2}",
-    //             contig,
-    //             (number_core.len() as f32 / (number_core_genes) as f32) * 100.0,
-    //             (number_trna.len() as f32 / (number_trna_genes) as f32) * 100.0
-    //         );
-    //     }
-    // }
-
     /// Takes an output string for the file name, and creates an HTML output
     /// with an embedded SVG element showing the plot.
-    pub fn plot(&self, output: PathBuf) -> Result<()> {
-        let mut html_file = fs::File::create(output)?;
-
+    pub fn plot(&self) -> Result<()> {
         let no_of_entries = self.data.len();
 
         let height = SUBPLOT_HEIGHT * no_of_entries;
@@ -159,35 +85,49 @@ impl PlotData {
         let svg = format!(
             "<svg width='{}' height='{}'>
         <defs>
-            <!-- This is an orange arrow pointer --> 
-            <marker id='point_orange' viewBox='0 0 10 10'
+            <!-- This is an ??? arrow pointer --> 
+            <marker id='point_orf' viewBox='0 0 10 10'
                 refX='1' refY='5'
                 markerUnits='strokeWidth'
                 markerWidth='3' markerHeight='3'
                 orient='auto'>
-                <path d='M 0 0 L 10 5 L 0 10 z' fill='#e6a009'/>
+                <path d='M 0 0 L 10 5 L 0 10 z' fill='{}'/>
             </marker>
-            <!-- This is a green arrow pointer --> 
-            <marker id='point_green' viewBox='0 0 10 10'
+            <!-- This is a ??? arrow pointer --> 
+            <marker id='point_cmscan' viewBox='0 0 10 10'
                 refX='1' refY='5'
                 markerUnits='strokeWidth'
                 markerWidth='3' markerHeight='3'
                 orient='auto'>
-                <path d='M 0 0 L 10 5 L 0 10 z' fill='#8fce00'/>
+                <path d='M 0 0 L 10 5 L 0 10 z' fill='{}'/>
+            </marker>
+            <!-- This is a ??? arrow pointer --> 
+            <marker id='point_trna' viewBox='0 0 10 10'
+                refX='1' refY='5'
+                markerUnits='strokeWidth'
+                markerWidth='3' markerHeight='3'
+                orient='auto'>
+                <path d='M 0 0 L 10 5 L 0 10 z' fill='{}'/>
+            </marker>
+            <!-- This is a ??? arrow pointer --> 
+            <marker id='point_rrna' viewBox='0 0 10 10'
+                refX='1' refY='5'
+                markerUnits='strokeWidth'
+                markerWidth='3' markerHeight='3'
+                orient='auto'>
+                <path d='M 0 0 L 10 5 L 0 10 z' fill='{}'/>
             </marker>
         </defs>
     {}
     <g id='textGroup'></g>
     \
 </svg>",
-            WIDTH, height, base_chroms
+            WIDTH, height, COLORS[0], COLORS[1], COLORS[2], COLORS[3], base_chroms
         );
 
         let html = make_html(svg);
 
-        html_file
-            .write_all(html.as_bytes())
-            .expect("unable to write");
+        let _ = stdoutln!("{}", html);
 
         Ok(())
     }
@@ -227,7 +167,7 @@ fn generate_plot_annotations(data: &PlotData) -> String {
         let y_text_label = (y1 - SUBPLOT_HEIGHT) + MARGIN + y_label_offset;
         let contig_text_label = format!(
             "
-                <text x='{x1}' y='{y_text_label}' class='small' font-family='monospace'>{contig_id}</text>"
+                <text x='{x1}' y='{y_text_label}' font-weight='bold' class='small' font-family='monospace'>{contig_id}</text>"
         );
 
         base_chroms += &line;
@@ -237,7 +177,7 @@ fn generate_plot_annotations(data: &PlotData) -> String {
         // now add each of the mitogenes in turn
         // data point scales
         let x_data_min = 0.0;
-        let x_data_max = mitogenes[0].end as f32;
+        let x_data_max = mitogenes.iter().last().unwrap().end as f32;
         // visualisation scales
         let x_viz_min = x1 as f32;
         let x_viz_max = x2 as f32;
@@ -255,12 +195,21 @@ fn generate_plot_annotations(data: &PlotData) -> String {
             let x1_scaled = scale_x(*start as f32, x_data_min, x_data_max, x_viz_min, x_viz_max);
             let x2_scaled = scale_x(*end as f32, x_data_min, x_data_max, x_viz_min, x_viz_max);
 
-            let marker_string = feature_name;
+            let (x1_scaled, x2_scaled) = match strand {
+                Strand::Forward => (x1_scaled, x2_scaled),
+                Strand::Reverse => (x2_scaled, x1_scaled),
+                Strand::Unknown => (x1_scaled, x2_scaled),
+            };
+
+            let marker_string = source;
+
             // add arrows
-            let marker = if !marker_string.contains("Trn") {
-                "marker-end='url(#point_orange)'"
-            } else {
-                "marker-end='url(#point_green)'"
+            let marker = match marker_string.as_str() {
+                "ORFfinder" => "marker-end='url(#point_orf)'",
+                "cmscan" => "marker-end='url(#point_cmscan)'",
+                "tRNAscan-SE" => "marker-end='url(#point_trna)'",
+                "barrnap:0.9" => "marker-end='url(#point_rrna)'",
+                _ => "",
             };
 
             let mut rng = rand::rng();
@@ -289,7 +238,7 @@ fn generate_plot_annotations(data: &PlotData) -> String {
 
             // because SVG markers don't trigger events for some reason...
             let circle_hover = format!(
-                "<circle r='5' fill='transparent' cx='{x2_scaled}' cy='{y_gene}' onmousemove='showTooltip(evt, {mitogene_plus_range});' onmouseout='hideTooltip();' onclick='addTextOnClick(evt, {mitogene_label})'></circle>"
+                "<circle r='5' fill='transparent' cx='{x2_scaled}' cy='{y_gene}' onmousemove='showTooltip(evt, {mitogene_plus_range});' onmouseout='hideTooltip();'></circle>"
             );
 
             base_chroms += &gene_line;

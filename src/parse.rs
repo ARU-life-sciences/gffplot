@@ -6,8 +6,7 @@ use bio::{
 };
 use std::{collections::BTreeMap, path::PathBuf};
 
-const SOURCES: [&str; 4] = ["ORFfinder", "cmscan", "tRNAscan-SE", "barrnap:0.9"];
-
+#[derive(Debug)]
 pub struct Row {
     pub feature_name: String,
     pub source: String,
@@ -42,7 +41,7 @@ pub fn parse_gff(file: PathBuf) -> Result<PlotData> {
                 let target_name = attributes.get("target_name").unwrap();
                 let description = attributes.get("description").unwrap();
 
-                format!("Pfam accession: {pfam_accession}\nTarget name: {target_name}\nDescription: {description}")
+                format!("Pfam accession: {pfam_accession}</br>Target name: {target_name}</br>Description: {description}")
             }
             "cmscan" => {
                 let description = attributes.get("description").unwrap();
@@ -56,7 +55,10 @@ pub fn parse_gff(file: PathBuf) -> Result<PlotData> {
             }
             "barrnap:0.9" => {
                 let product = attributes.get("product").unwrap();
-                let note = attributes.get("note").unwrap();
+                let note = match attributes.get("note") {
+                    Some(s) => s,
+                    None => &"".to_string(),
+                };
 
                 format!("{product}: {note}")
             }
